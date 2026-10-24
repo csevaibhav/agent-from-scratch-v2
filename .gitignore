@@ -1,0 +1,18 @@
+# ============================================================
+# .gitignore — Git ko batata hai kaunsi files repo mein
+# commit NAHI karni
+# ------------------------------------------------------------
+# Kyun bani: kuch files ya toh secret hain, ya har machine pe
+#   alag banti hain. Unhe GitHub pe daalna galat hai.
+# ============================================================
+
+# Virtual environment: har machine pe "python -m venv .venv"
+# se dobara banta hai. Isme hazaaron library files hain,
+# repo mein nahi jaani chahiye.
+.venv/
+
+# Secrets aur local settings (API keys yahin aayengi).
+.env
+
+# Python ka compiled cache, apne aap ban jaata hai.
+__pycache__/
