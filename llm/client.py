@@ -97,3 +97,27 @@ class LLMClient:
                      "output_tokens": resp.usage.completion_tokens}
 
         return LLMResponse(content=msg.content, tool_calls=tool_calls, usage=usage, raw=resp)
+
+        # ------------------------------------------------------------------
+    # MESSAGE BUILDERS: history mein jo messages judte hain, unka format
+    # provider ke hisaab se alag hota hai (OpenAI vs Anthropic vs Bedrock).
+    # Isliye yeh conversion WRAPPER ka kaam hai, agent ka nahi.
+    # Agent bas yeh methods call karega, format kabhi nahi jaanega. (Decision D5)
+    # ------------------------------------------------------------------
+    def assistant_message(self, resp: LLMResponse) -> dict:
+        """Model ka response (text + tool calls) history mein daalne layak message banata hai."""
+        msg = {"role": "assistant", "content": resp.content or ""}
+        if resp.tool_calls:
+            msg["tool_calls"] = [
+                {
+                    "id": tc["id"],
+                    "type": "function",
+                    "function": {"name": tc["name"], "arguments": tc["arguments"]},
+                }
+                for tc in resp.tool_calls
+            ]
+        return msg
+
+    def tool_result_message(self, tool_call_id: str, content: str) -> dict:
+        """Tool ka result history mein daalne layak message. tool_call_id se model jaanta hai kis call ka result hai."""
+        return {"role": "tool", "tool_call_id": tool_call_id, "content": content}
