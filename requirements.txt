@@ -1,0 +1,10 @@
+# ============================================================
+# requirements.txt — Project ki Python libraries ki list
+# ------------------------------------------------------------
+# Kyun bani: koi bhi (tum naye laptop pe, ya interviewer) ek
+#   command se same libraries install kar sake:
+#       python -m pip install -r requirements.txt
+# Har phase mein nayi library aayegi toh yahan add karenge.
+# ============================================================
+openai
+python-dotenv
