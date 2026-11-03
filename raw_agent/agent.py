@@ -43,62 +43,64 @@ SYSTEM_PROMPT = (
 llm = LLMClient()
 
 
-def run_agent(question: str, max_iterations: int = 6, verbose: bool = True) -> str:
+def run_agent(question: str, system_prompt: str = SYSTEM_PROMPT,
+              max_iterations: int = 6, verbose: bool = True) -> dict:
     """
-    Ek sawaal leke ReAct loop chalata hai aur final jawab lautata hai.
-    max_iterations : kitni baar tak LLM call karne denge (safety limit)
-    verbose        : har step print karna hai ya nahi (abhi debugging; Phase 2 mein yeh tracer banega)
+    Ek sawaal leke ReAct loop chalata hai.
+
+    RETURN (dict), taaki evals/traces result ko CODE se check kar sakein:
+        answer   : final jawab (str)
+        messages : poori history (kaunsa tool kab call hua, sab isme hai)
+        steps    : kitni LLM calls lagi
+        tokens   : {"input", "output"}
+
+    system_prompt  : parameter isliye, taaki alag-alag prompts compare kar sakein (Step 3b)
+    max_iterations : safety limit
+    verbose        : har step print karna (Phase 2 mein yeh tracer banega)
     """
-    # Short-term memory = yeh messages list. Har step isme judta hai.
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": question},
     ]
-    total_in, total_out = 0, 0   # poore run ke tokens (cost ka andaaza)
+    total_in, total_out = 0, 0
 
     for step in range(1, max_iterations + 1):
-        # ---------- REASON: model history padh ke decide karta hai ----------
+        # ---------- REASON ----------
         resp = llm.chat(messages, tools=TOOL_SCHEMAS)
         total_in += resp.usage.get("input_tokens", 0)
         total_out += resp.usage.get("output_tokens", 0)
-
-        # Model ka har response history mein jodo, final wala bhi.
-        # (Step 2 mein yeh missing tha, isliye follow-up sawaal toot jaata.)
         messages.append(llm.assistant_message(resp))
 
-        # ---------- STOP CONDITION 1: koi tool nahi maanga = kaam khatam ----------
+        # ---------- STOP CONDITION 1: koi tool nahi = final answer ----------
         if not resp.tool_calls:
             if verbose:
                 print(f"[step {step}] FINAL ANSWER")
-                print(f"[tokens] input={total_in} output={total_out} total={total_in + total_out}")
-            return resp.content
+                print(f"[tokens] input={total_in} output={total_out}")
+            return {"answer": resp.content, "messages": messages, "steps": step,
+                    "tokens": {"input": total_in, "output": total_out}}
 
-        # ---------- ACT + OBSERVE: har maanga gaya tool chalao ----------
+        # ---------- ACT + OBSERVE ----------
         for tc in resp.tool_calls:
-            result = execute_tool(tc["name"], tc["arguments"])                 # ACT (hamara code)
-            messages.append(llm.tool_result_message(tc["id"], result))         # OBSERVE (result history mein)
+            result = execute_tool(tc["name"], tc["arguments"])
+            messages.append(llm.tool_result_message(tc["id"], result))
             if verbose:
                 print(f"[step {step}] ACT  : {tc['name']}({tc['arguments']})")
                 print(f"[step {step}] OBS  : {result}")
 
     # ---------- STOP CONDITION 2: limit cross ----------
-    if verbose:
-        print(f"[tokens] input={total_in} output={total_out} total={total_in + total_out}")
-    return f"Stopped: {max_iterations} steps mein jawab nahi mila."
+    return {"answer": f"Stopped: {max_iterations} steps mein jawab nahi mila.",
+            "messages": messages, "steps": max_iterations,
+            "tokens": {"input": total_in, "output": total_out}}
 
 
-# Sirf tab chalta hai jab file seedha run ho (import hone pe nahi).
 if __name__ == "__main__":
     tests = [
-        # 1 tool: simple
         "What is 1234 * 5678 + 99? Is it even or odd?",
-        # 2 tools, DEPENDENT: pehle time chahiye, tabhi calculation ho sakti hai
         "Find the current hour of the day, multiply it by 1000, and then add 7006751 to it.",
-        # 0 tools
         "In one line, what is the capital of Japan?",
     ]
     for q in tests:
         print("=" * 70)
         print("USER:", q)
-        answer = run_agent(q)
-        print("ANSWER:", answer)
+        result = run_agent(q)
+        print("ANSWER:", result["answer"])   # ab dict hai, isliye ["answer"]
