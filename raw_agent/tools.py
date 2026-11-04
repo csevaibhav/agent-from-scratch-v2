@@ -86,9 +86,17 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "calculator",
+            # DESCRIPTION = tool ka prompt. Step 3c mein model ne "(a - b) * c" ki jagah
+            # "a - b * c" bheja (brackets missing) aur jawab galat aaya.
+            # "KAISE use karna hai" wale rules yahin likhte hain, system prompt mein nahi.
+            # Example NEUTRAL hai ('(10 - 3) * 5'), test sawaalon jaisa nahi (leakage se bachav).
             "description": "Evaluate a math expression and return the exact result. "
                            "Use this for ANY arithmetic instead of calculating yourself. "
-                           "Example input: '25 * 4 + 10'",
+                           "IMPORTANT: Python operator precedence applies (* and / before + and -). "
+                           "When a task says to do one operation and THEN another, wrap the earlier "
+                           "part in parentheses so the order is preserved. "
+                           "Example: 'subtract 3 from 10, then multiply by 5' -> '(10 - 3) * 5', "
+                           "NOT '10 - 3 * 5'.",
             "parameters": {                      # JSON Schema: kaunse arguments, kis type ke
                 "type": "object",
                 "properties": {

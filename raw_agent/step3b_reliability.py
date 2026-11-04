@@ -76,6 +76,17 @@ def calculator_was_used(messages: list) -> bool:
     return False
 
 
+def calculator_expressions(messages: list) -> list:
+    """Model ne calculator ko jo-jo expressions bheje, unki list.
+    FAIL pe print karte hain, taaki pata chale galti expression (argument) mein thi ya kahin aur."""
+    exprs = []
+    for m in messages:
+        for tc in m.get("tool_calls", []):
+            if tc["function"]["name"] == "calculator":
+                exprs.append(tc["function"]["arguments"])
+    return exprs
+
+
 def evaluate(prompt_name: str, prompt: str):
     print("=" * 70)
     print(f"PROMPT: {prompt_name}")
@@ -96,13 +107,15 @@ def evaluate(prompt_name: str, prompt: str):
                   f"calculator_used={'YES' if ok_traj else 'NO '} | steps={result['steps']} | "
                   f"expected={expected}")
             if not ok_answer:
-                # FAIL pe poora jawab: model ki galti thi ya checker ki, yeh dekhna hai.
-                print(f"      FULL ANSWER: {result['answer']!r}")
+                # FAIL pe poora jawab + model ke bheje expressions:
+                # galti model ki thi, arguments ki, ya hamare checker ki?
+                print(f"      FULL ANSWER : {result['answer']!r}")
+                print(f"      CALC ARGS   : {calculator_expressions(result['messages'])}")
 
     print(f"\n  --> Answer pass rate     : {answer_pass}/{total}")
     print(f"  --> Trajectory pass rate : {traj_pass}/{total}")
 
 
 if __name__ == "__main__":
-    evaluate("OLD (soft rules)", OLD_PROMPT)
+    #evaluate("OLD (soft rules)", OLD_PROMPT)
     evaluate("NEW (strict, neutral example)", SYSTEM_PROMPT)
