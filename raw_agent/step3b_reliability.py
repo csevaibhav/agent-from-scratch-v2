@@ -59,7 +59,15 @@ TEST_CASES = [
         "expected": lambda now: (now.year - 1947) * 12,
     },
 ]
-
+# NO-TOOL cases (Step 4a fix): yeh messages kuch MAANGTE nahi hain.
+# Sahi behaviour: koi tool call nahi, 1 step mein chhota jawab.
+# "I was born in 2000." jaan-boojh ke rakha hai, kyunki Step 4a mein isi jaise
+# message pe agent ne bina poochhe age calculate kar di thi.
+NO_TOOL_CASES = [
+    "My name is Vaibhav.",
+    "I was born in 2000.",
+    "Thanks, that was helpful!",
+]
 
 def answer_is_correct(answer: str, expected: int) -> bool:
     """Jawab ke saare numbers nikalo (commas hata ke, minus sign samet) aur sahi number dhoondho."""
@@ -115,7 +123,30 @@ def evaluate(prompt_name: str, prompt: str):
     print(f"\n  --> Answer pass rate     : {answer_pass}/{total}")
     print(f"  --> Trajectory pass rate : {traj_pass}/{total}")
 
+def evaluate_no_tool(prompt_name: str, prompt: str):
+    """Statement/thanks pe agent ko KUCH NAHI karna chahiye: koi tool nahi, 1 step.
+    Achha agent jaanta hai kab kaam karna hai, aur kab NAHI."""
+    print("=" * 70)
+    print(f"NO-TOOL CASES | PROMPT: {prompt_name}")
+    total = passed = 0
+
+    for msg in NO_TOOL_CASES:
+        for i in range(1, RUNS_PER_QUESTION + 1):
+            result = run_agent(msg, system_prompt=prompt, verbose=False)
+            tools_called = [tc["function"]["name"]
+                            for m in result["messages"] for tc in m.get("tool_calls", [])]
+            ok = not tools_called and result["steps"] == 1
+            total += 1
+            passed += ok
+            print(f"  {msg!r:32} run {i}: {'PASS' if ok else 'FAIL'} | "
+                  f"tools={tools_called or '-'} | steps={result['steps']}")
+            if not ok:
+                print(f"      FULL ANSWER: {result['answer']!r}")
+
+    print(f"\n  --> No-tool pass rate: {passed}/{total}")
 
 if __name__ == "__main__":
-    #evaluate("OLD (soft rules)", OLD_PROMPT)
-    evaluate("NEW (strict, neutral example)", SYSTEM_PROMPT)
+    # Naya behaviour test:
+    evaluate_no_tool("NEW (decide-first)", SYSTEM_PROMPT)
+    # Regression check: prompt badla hai, toh math cases ab bhi pass hone chahiye.
+    evaluate("NEW (decide-first)", SYSTEM_PROMPT)

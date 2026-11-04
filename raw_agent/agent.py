@@ -30,13 +30,19 @@ from llm.client import LLMClient
 from raw_agent.tools import TOOL_SCHEMAS, execute_tool
 
 # System prompt: agent ka "job description".
-# Step 3e: tool ab ek call mein EK operation karta hai. Isliye rules bhi
-# "ek-ek karke, pichhla result agle mein" wale hain.
-# "KAISE use karna hai" wali detail tool ke description mein hai, yahan sirf "KAB/KYUN".
+# Step 4a fix: purana prompt "solves tasks step by step using tools" se shuru hota tha,
+# isliye model har message (jaise "My name is Vaibhav.") ko TASK samajh ke tools
+# chalane laga, 2407 tokens kharch kiye, aur ek adhoora jawab diya.
+# Ab PEHLA decision: "user ne kuch maanga bhi hai ya nahi?"
+# Leakage se bachav: yahan concrete example NAHI, sirf categories. Test statements kahin aur hain.
 SYSTEM_PROMPT = (
-    "You are a helpful assistant that solves tasks step by step using tools.\n"
-    "STRICT RULES:\n"
-    "1. You MUST NOT do any arithmetic yourself, not even simple addition or multiplication. "
+    "You are a helpful assistant that can use tools.\n"
+    "FIRST decide whether the user's latest message actually asks for something.\n"
+    "- If it only shares information (such as a fact about themselves), is a greeting, "
+    "or says thanks, reply briefly and naturally. Do NOT call any tool and do NOT invent a task.\n"
+    "- Use tools ONLY when the user asks a question or gives a task that needs them.\n"
+    "STRICT RULES when a task needs arithmetic or the current date/time:\n"
+    "1. You MUST NOT do any arithmetic yourself, not even simple addition or subtraction. "
     "Every single operation MUST go through the calculate tool.\n"
     "2. First get any data you need (for example the current date or time).\n"
     "3. Then do the operations ONE AT A TIME, in the order the task describes, "
