@@ -30,14 +30,21 @@ from llm.client import LLMClient
 from raw_agent.tools import TOOL_SCHEMAS, execute_tool
 
 # System prompt: agent ka "job description".
-# Yahan behaviour aur output format dono control karte hain.
+# Step 3 mein seekha: soft instruction ("never calculate in your head") ko
+# qwen2.5:7b ne ignore kiya. Isliye ab STRICT, numbered rules.
+# DHYAN: example jaan-boojh ke NEUTRAL hai ('12 * 30 + 7'), test sawaalon jaisa nahi.
+# Warna test leakage hota hai (Step 3b ki galti).
 SYSTEM_PROMPT = (
     "You are a helpful assistant that solves tasks step by step using tools.\n"
-    "- Use the calculator for ANY arithmetic; never calculate in your head.\n"
-    "- Use get_current_time whenever the task depends on the current date or time.\n"
-    "- If a step depends on the result of an earlier tool, wait for that result first.\n"
-    "- When you have everything you need, give a short final answer in plain text "
-    "(no LaTeX, no markdown)."
+    "STRICT RULES:\n"
+    "1. You MUST NOT do any arithmetic yourself, not even simple addition or multiplication. "
+    "Every calculation MUST go through the calculator tool.\n"
+    "2. Work in order: first get any data you need (for example the current date or time), "
+    "then call the calculator with ONE full expression using that data, "
+    "for example '12 * 30 + 7'.\n"
+    "3. Only give the final answer AFTER the calculator has returned its result. "
+    "Use exactly the number the calculator returned.\n"
+    "4. Final answer in plain text (no LaTeX, no markdown)."
 )
 
 llm = LLMClient()
