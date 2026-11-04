@@ -71,7 +71,7 @@ def calculator_was_used(messages: list) -> bool:
     """History mein dekho: kya kisi assistant message ne calculator tool maanga tha?"""
     for m in messages:
         for tc in m.get("tool_calls", []):
-            if tc["function"]["name"] == "calculator":
+            if tc["function"]["name"] == "calculate":
                 return True
     return False
 
@@ -82,7 +82,7 @@ def calculator_expressions(messages: list) -> list:
     exprs = []
     for m in messages:
         for tc in m.get("tool_calls", []):
-            if tc["function"]["name"] == "calculator":
+            if tc["function"]["name"] == "calculate":
                 exprs.append(tc["function"]["arguments"])
     return exprs
 

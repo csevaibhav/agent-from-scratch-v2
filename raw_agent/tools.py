@@ -3,109 +3,106 @@ raw_agent/tools.py — Agent ke TOOLS: functions + unka JSON schema + dispatcher
 ==============================================================================
 
 KYUN BANI:
-    Agent ke "haath-pair" yahi tools hain. LLM sirf text soch sakta hai.
-    Calculation, time dekhna, file padhna jaise kaam tools karte hain.
+    Agent ke "haath-pair" yahi tools hain. LLM sirf text soch sakta hai;
+    calculation, time dekhna jaise kaam tools karte hain.
 
 IS FILE MEIN 4 CHEEZEIN HAIN:
-    1. Asli Python functions   -> calculator(), get_current_time()
-    2. TOOL_SCHEMAS            -> model ko batane ke liye ki kaunse tools hain
-                                  aur unke arguments kya hain (JSON Schema)
-    3. TOOL_REGISTRY           -> tool ka naam -> Python function (lookup table)
-    4. execute_tool()          -> model ke tool_call ko padh ke sahi function chalata hai
+    1. Asli Python functions   -> calculate(), get_current_time()
+    2. TOOL_SCHEMAS            -> model ka "menu card" (JSON Schema)
+    3. TOOL_REGISTRY           -> tool naam -> Python function
+    4. execute_tool()          -> model ke tool_call ko chalane wala dispatcher
 
-IMPORTANT DESIGN RULES:
-    - Tool hamesha STRING lautata hai, kyunki result wapas model ko text ban ke jaata hai.
-    - Error bhi STRING mein lautate hain, exception nahi phenkte. Agent crash nahi
-      hoga, aur model error padh ke khud galti sudhaar sakta hai.
+STEP 3e REDESIGN (kyun badla):
+    Step 3c/3d mein qwen2.5:7b ne:
+      - date string "2026-11-04" ko galat parse kiya (20261104 bana diya)
+      - "(a - b) * c" ki jagah "a - b * c" bheja (brackets bhool gaya)
+    Prompt aur description se 3 baar fix try kiya. Har baar kuch theek hua aur
+    kuch toota (regression). Isliye ab TOOL DESIGN badla:
+      - get_current_time  -> STRUCTURED JSON (year, day, hour...). Parsing hi khatam.
+      - calculate(a, operator, b) -> ek call = EK operation, isliye brackets ki zaroorat nahi.
+        operator ek ENUM hai, toh model galat operator bhej hi nahi sakta.
+    PRINCIPLE: jo schema se enforce ho sakta hai, use prompt pe mat chhodo.
+
+DESIGN RULES (pehle jaise):
+    - Tool hamesha STRING lautata hai (result text ban ke model ke paas jaata hai)
+    - Error bhi STRING mein, exception nahi. Agent crash nahi hoga, model sudhaar sakta hai.
 
 LANGCHAIN MAPPING (interview):
-    - @tool decorator  = function ki docstring + type hints se yahi TOOL_SCHEMAS
-                         apne aap bana deta hai
-    - model.bind_tools = hamara tools=TOOL_SCHEMAS bhejna
-    - ToolNode (LangGraph) = hamara execute_tool()
+    - @tool decorator      = docstring + type hints se yahi schema banata hai
+                             (Literal["+", "-", ...] type hint -> enum)
+    - model.bind_tools     = tools=TOOL_SCHEMAS bhejna
+    - ToolNode (LangGraph) = execute_tool()
 """
 
-import ast
 import json
 import operator
 from datetime import datetime
-
 
 # ------------------------------------------------------------------
 # 1. ASLI FUNCTIONS
 # ------------------------------------------------------------------
 
-# Calculator mein sirf yeh operators allowed hain.
-# eval() use NAHI karte: model ka diya koi bhi Python code (jaise
-# file delete karna) chal sakta hai. Yeh security hole hai.
-_ALLOWED_OPS = {
-    ast.Add: operator.add,      # +
-    ast.Sub: operator.sub,      # -
-    ast.Mult: operator.mul,     # *
-    ast.Div: operator.truediv,  # /
-    ast.Pow: operator.pow,      # **
-    ast.Mod: operator.mod,      # %
-    ast.USub: operator.neg,     # -5 (negative number)
-    ast.UAdd: operator.pos,     # +5
+# Allowed operators. Schema mein bhi exactly yahi ENUM hai.
+_OPS = {
+    "+": operator.add,
+    "-": operator.sub,
+    "*": operator.mul,
+    "/": operator.truediv,
+    "**": operator.pow,
+    "%": operator.mod,
 }
 
 
-def _safe_eval(node):
-    """Expression ke tree (AST) ko recursively solve karta hai. Sirf numbers aur upar wale operators."""
-    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
-        return node.value
-    if isinstance(node, ast.BinOp) and type(node.op) in _ALLOWED_OPS:      # jaise 2 + 3
-        return _ALLOWED_OPS[type(node.op)](_safe_eval(node.left), _safe_eval(node.right))
-    if isinstance(node, ast.UnaryOp) and type(node.op) in _ALLOWED_OPS:    # jaise -5
-        return _ALLOWED_OPS[type(node.op)](_safe_eval(node.operand))
-    raise ValueError("Sirf numbers aur + - * / ** % allowed hain")
-
-
-def calculator(expression: str) -> str:
-    """Math expression solve karta hai, jaise '1234 * 5678 + 99'."""
+def calculate(a: float, operator: str, b: float) -> str:
+    """EK arithmetic operation: a <operator> b. Multi-step kaam ke liye model ise baar-baar call karega."""
+    if operator not in _OPS:                       # enum ke bawajood double-check (defensive coding)
+        return f"Error: operator '{operator}' allowed nahi. Use one of {list(_OPS)}"
     try:
-        tree = ast.parse(expression, mode="eval")   # string -> expression tree
-        return str(_safe_eval(tree.body))
-    except Exception as e:
-        return f"Error: {e}"                        # error bhi string mein, crash nahi
+        result = _OPS[operator](a, b)
+    except ZeroDivisionError:
+        return "Error: zero se divide nahi kar sakte"
+    # 948.0 ki jagah 948 dikhe, taaki model aur hamara checker dono confuse na ho.
+    if isinstance(result, float) and result.is_integer():
+        result = int(result)
+    return str(result)
 
 
 def get_current_time() -> str:
-    """Laptop ka current date aur time lautata hai."""
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S (%A)")
+    """Current date/time ko STRUCTURED JSON mein lautata hai, taaki model ko string parse na karni pade."""
+    now = datetime.now()
+    return json.dumps({
+        "year": now.year,
+        "month": now.month,
+        "day": now.day,
+        "hour": now.hour,
+        "minute": now.minute,
+        "weekday": now.strftime("%A"),
+        "iso": now.strftime("%Y-%m-%d %H:%M:%S"),   # insaan ke padhne ke liye
+    })
 
 
 # ------------------------------------------------------------------
-# 2. TOOL_SCHEMAS — model ko tools ka "menu card"
+# 2. TOOL_SCHEMAS — model ka "menu card"
 # ------------------------------------------------------------------
-# Format OpenAI ka function-calling format hai (Ollama bhi yahi samajhta hai).
-# DHYAN: "description" asal mein PROMPT hai. Model isi ko padh ke decide
-# karta hai ki tool kab use karna hai. Description kharab ho toh tool choice galat hogi.
 TOOL_SCHEMAS = [
     {
         "type": "function",
         "function": {
-            "name": "calculator",
-            # DESCRIPTION = tool ka prompt. Step 3c mein model ne "(a - b) * c" ki jagah
-            # "a - b * c" bheja (brackets missing) aur jawab galat aaya.
-            # "KAISE use karna hai" wale rules yahin likhte hain, system prompt mein nahi.
-            # Example NEUTRAL hai ('(10 - 3) * 5'), test sawaalon jaisa nahi (leakage se bachav).
-            "description": "Evaluate a math expression and return the exact result. "
-                           "Use this for ANY arithmetic instead of calculating yourself. "
-                           "IMPORTANT: Python operator precedence applies (* and / before + and -). "
-                           "When a task says to do one operation and THEN another, wrap the earlier "
-                           "part in parentheses so the order is preserved. "
-                           "Example: 'subtract 3 from 10, then multiply by 5' -> '(10 - 3) * 5', "
-                           "NOT '10 - 3 * 5'.",
-            "parameters": {                      # JSON Schema: kaunse arguments, kis type ke
+            "name": "calculate",
+            "description": "Perform exactly ONE arithmetic operation: a <operator> b, "
+                           "and return the exact result. Use this for ANY arithmetic. "
+                           "For multi-step tasks, call it once per operation, in the order the "
+                           "task describes, and use the previous result as the next input.",
+            "parameters": {
                 "type": "object",
                 "properties": {
-                    "expression": {
-                        "type": "string",
-                        "description": "A math expression using numbers and + - * / ** %",
-                    }
+                    "a": {"type": "number", "description": "First number"},
+                    # ENUM: model sirf inhi mein se chun sakta hai. Schema-level enforcement.
+                    "operator": {"type": "string", "enum": list(_OPS),
+                                 "description": "The operation to perform"},
+                    "b": {"type": "number", "description": "Second number"},
                 },
-                "required": ["expression"],
+                "required": ["a", "operator", "b"],
             },
         },
     },
@@ -113,42 +110,37 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "get_current_time",
-            "description": "Get the current local date, time and day of the week.",
-            "parameters": {"type": "object", "properties": {}, "required": []},  # koi argument nahi
+            "description": "Get the current local date and time as JSON with separate fields: "
+                           "year, month, day, hour, minute, weekday.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
 ]
 
-
 # ------------------------------------------------------------------
 # 3. TOOL_REGISTRY — naam se function dhoondhne ki table
 # ------------------------------------------------------------------
-# Model sirf tool ka NAAM (string) bhejta hai. Yeh dict us naam ko
-# asli Python function se jodti hai.
 TOOL_REGISTRY = {
-    "calculator": calculator,
+    "calculate": calculate,
     "get_current_time": get_current_time,
 }
 
 
 # ------------------------------------------------------------------
-# 4. execute_tool — "worker" jo model ka order execute karta hai
+# 4. execute_tool — model ka "order" execute karne wala worker
 # ------------------------------------------------------------------
 def execute_tool(name: str, arguments: str) -> str:
     """
-    name      : model ne jo tool maanga, jaise "calculator"
-    arguments : JSON STRING, jaise '{"expression": "2+2"}'
-                (model string bhejta hai, dict nahi, isliye json.loads karna padta hai)
+    name      : tool ka naam, jaise "calculate"
+    arguments : JSON STRING, jaise '{"a": 2026, "operator": "-", "b": 1947}'
     """
-    if name not in TOOL_REGISTRY:                   # model kabhi galat/naya tool naam bana deta hai
+    if name not in TOOL_REGISTRY:
         return f"Error: '{name}' naam ka koi tool nahi hai"
-
     try:
-        args = json.loads(arguments) if arguments else {}   # string -> dict
+        args = json.loads(arguments) if arguments else {}
     except json.JSONDecodeError:
         return f"Error: arguments valid JSON nahi hain: {arguments}"
-
     try:
-        return TOOL_REGISTRY[name](**args)          # **args: dict ko keyword arguments bana deta hai
-    except TypeError as e:                          # galat/missing argument naam
+        return TOOL_REGISTRY[name](**args)
+    except TypeError as e:                 # galat/missing argument
         return f"Error: galat arguments: {e}"
