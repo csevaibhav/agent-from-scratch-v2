@@ -36,6 +36,7 @@ LANGCHAIN MAPPING (interview):
 
 import json
 import operator
+from raw_agent.memory import recall, remember   # Step 4b: long-term memory tools
 from datetime import datetime
 
 # ------------------------------------------------------------------
@@ -115,6 +116,37 @@ TOOL_SCHEMAS = [
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
+        {
+        "type": "function",
+        "function": {
+            "name": "remember",
+            "description": "Save a durable fact about the user for future conversations "
+                           "(their name, a preference, an important personal detail they shared). "
+                           "Write it as a short third-person sentence, for example "
+                           "'User prefers short answers.' Never save passwords, card numbers or ID numbers.",
+            "parameters": {
+                "type": "object",
+                "properties": {"fact": {"type": "string", "description": "The fact to save"}},
+                "required": ["fact"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recall",
+            "description": "Search facts saved from EARLIER conversations with the user. "
+                           "Call this before answering a question about the user (their name, "
+                           "preferences, details they shared before) when it is NOT already in "
+                           "the current conversation.",
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string",
+                                         "description": "What to look for, e.g. 'name' or 'language preference'"}},
+                "required": ["query"],
+            },
+        },
+    },
 ]
 
 # ------------------------------------------------------------------
@@ -123,6 +155,8 @@ TOOL_SCHEMAS = [
 TOOL_REGISTRY = {
     "calculate": calculate,
     "get_current_time": get_current_time,
+    "remember": remember,
+    "recall": recall,
 }
 
 

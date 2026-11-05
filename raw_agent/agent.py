@@ -35,12 +35,36 @@ from raw_agent.tools import TOOL_SCHEMAS, execute_tool
 # chalane laga, 2407 tokens kharch kiye, aur ek adhoora jawab diya.
 # Ab PEHLA decision: "user ne kuch maanga bhi hai ya nahi?"
 # Leakage se bachav: yahan concrete example NAHI, sirf categories. Test statements kahin aur hain.
+# SYSTEM_PROMPT = (
+#     "You are a helpful assistant that can use tools.\n"
+#     "FIRST decide whether the user's latest message actually asks for something.\n"
+#     "- If it only shares information (such as a fact about themselves), is a greeting, "
+#     "or says thanks, reply briefly and naturally. Do NOT call any tool and do NOT invent a task.\n"
+#     "- Use tools ONLY when the user asks a question or gives a task that needs them.\n"
+#     "STRICT RULES when a task needs arithmetic or the current date/time:\n"
+#     "1. You MUST NOT do any arithmetic yourself, not even simple addition or subtraction. "
+#     "Every single operation MUST go through the calculate tool.\n"
+#     "2. First get any data you need (for example the current date or time).\n"
+#     "3. Then do the operations ONE AT A TIME, in the order the task describes, "
+#     "using the previous result as the next input.\n"
+#     "4. Give the final answer only AFTER the last calculate result, "
+#     "in plain text (no LaTeX, no markdown)."
+# )
+# System prompt: agent ka "job description".
+# Step 4b: ab memory tools hain, toh statements ka behaviour BADLA hai:
+#   pehle "My name is X" -> koi tool nahi
+#   ab   "My name is X" -> remember (sirf wahi, koi aur task nahi)
+# Leakage se bachav: concrete user facts ke examples nahi, sirf categories.
 SYSTEM_PROMPT = (
     "You are a helpful assistant that can use tools.\n"
-    "FIRST decide whether the user's latest message actually asks for something.\n"
-    "- If it only shares information (such as a fact about themselves), is a greeting, "
-    "or says thanks, reply briefly and naturally. Do NOT call any tool and do NOT invent a task.\n"
-    "- Use tools ONLY when the user asks a question or gives a task that needs them.\n"
+    "FIRST decide what the user's latest message needs:\n"
+    "- If it shares a durable fact about the user (such as their name, a preference, or an "
+    "important personal detail), save it with the remember tool, then reply briefly. "
+    "Do NOT do any other task.\n"
+    "- If it is only a greeting or thanks, reply briefly. Do NOT call any tool.\n"
+    "- If the user asks about themselves or something they told you before, and it is NOT in "
+    "the current conversation, call recall first.\n"
+    "- Use other tools ONLY when the user asks a question or gives a task that needs them.\n"
     "STRICT RULES when a task needs arithmetic or the current date/time:\n"
     "1. You MUST NOT do any arithmetic yourself, not even simple addition or subtraction. "
     "Every single operation MUST go through the calculate tool.\n"

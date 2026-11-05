@@ -20,7 +20,8 @@ DHYAN DENA:
     jaati hai. Yahi short-term memory ki keemat hai.
 """
 
-from raw_agent.agent import Agent
+from raw_agent.agent import Agent           # agent class (short-term memory iske andar)
+from raw_agent.memory import all_memories   # /memory command: long-term memory file padhne ke liye
 
 agent = Agent(verbose=True)
 print("Chat shuru. Commands: /history  /reset  /exit")
@@ -39,6 +40,16 @@ while True:
         roles = [m["role"] for m in agent.messages]
         print(f"[{len(agent.messages)} messages] {roles}")
         continue
+
+    if user == "/memory":
+        # Long-term memory ko FILE (system state) se dikhao, model se nahi poochte.
+        # (Step 4a seekh: model "reset ho gaya" jaisa jhooth bol sakta hai.)
+        facts = all_memories()
+        print(f"[{len(facts)} saved facts]")
+        for f in facts:
+            print(f"  - {f['fact']}  ({f['created_at']})")
+        continue
+
     
     # Galat/unknown command model tak NA jaaye.
     # Step 4a mein "/history/reset" (typo) model ke paas gaya, aur model ne

@@ -16,3 +16,6 @@
 
 # Python ka compiled cache, apne aap ban jaata hai.
 __pycache__/
+
+# Agent ki long-term memory (personal facts). Repo mein nahi jaani chahiye.
+data/
