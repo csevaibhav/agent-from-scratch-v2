@@ -73,7 +73,11 @@ class Agent:
     """
 
     def __init__(self, system_prompt: str = SYSTEM_PROMPT,
-                 max_iterations: int = 6, verbose: bool = True):
+                 max_iterations: int = 6, verbose: bool = True,
+                 llm_client: LLMClient | None = None):
+        # llm_client: eval alag-alag models ka client de sakta hai.
+        # Na diya toh default (.env wala) model use hoga.
+        self.llm = llm_client or llm
         self.system_prompt = system_prompt
         self.max_iterations = max_iterations
         self.verbose = verbose
@@ -93,10 +97,10 @@ class Agent:
 
         for step in range(1, self.max_iterations + 1):
             # ---------- REASON: poori history (pichhle turns samet) jaati hai ----------
-            resp = llm.chat(self.messages, tools=TOOL_SCHEMAS)
+            resp = self.llm.chat(self.messages, tools=TOOL_SCHEMAS)
             total_in += resp.usage.get("input_tokens", 0)
             total_out += resp.usage.get("output_tokens", 0)
-            self.messages.append(llm.assistant_message(resp))
+            self.messages.append(self.llm.assistant_message(resp))
 
             # ---------- STOP CONDITION 1: koi tool nahi = final answer ----------
             if not resp.tool_calls:
@@ -108,7 +112,7 @@ class Agent:
             # ---------- ACT + OBSERVE ----------
             for tc in resp.tool_calls:
                 result = execute_tool(tc["name"], tc["arguments"])
-                self.messages.append(llm.tool_result_message(tc["id"], result))
+                self.messages.append(self.llm.tool_result_message(tc["id"], result))
                 if self.verbose:
                     print(f"[step {step}] ACT : {tc['name']}({tc['arguments']})")
                     print(f"[step {step}] OBS : {result}")
@@ -120,13 +124,10 @@ class Agent:
 
 
 def run_agent(question: str, system_prompt: str = SYSTEM_PROMPT,
-              max_iterations: int = 6, verbose: bool = True) -> dict:
-    """
-    ONE-SHOT helper: naya Agent, ek sawaal, khatam. Koi memory nahi.
-    Kyun rakha: evals (step3b_reliability) har run FRESH chahte hain. Pichhle run
-    ki history agle run ko influence na kare, warna test fair nahi rahega.
-    """
-    return Agent(system_prompt, max_iterations, verbose).ask(question)
+              max_iterations: int = 6, verbose: bool = True,
+              llm_client: LLMClient | None = None) -> dict:
+    """ONE-SHOT: naya Agent, ek sawaal, koi memory nahi (evals ke liye fresh run)."""
+    return Agent(system_prompt, max_iterations, verbose, llm_client).ask(question)
 
 
 if __name__ == "__main__":
